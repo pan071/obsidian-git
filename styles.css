@@ -688,6 +688,97 @@ which itself is adapted from the diff2html library with the following original l
     color: var(--text-accent-hover);
 }
 
+/* Horizontal scrollbars of the split diff view without line wrapping */
+.git-diff-hscroll {
+    display: none;
+}
+
+.git-split-diff-view.git-diff-no-wrap {
+    /* The native scrollbars would sit at the end of the document */
+    .cm-mergeView .cm-scroller {
+        scrollbar-width: none;
+    }
+
+    /* The sticky gutters cover the horizontally scrolled content */
+    .cm-mergeView .cm-gutters {
+        background-color: var(--background-primary);
+    }
+
+    .git-diff-hscroll {
+        display: flex;
+        position: sticky;
+        bottom: 0;
+        z-index: 2;
+        background-color: var(--background-primary);
+    }
+
+    .git-diff-hscroll-track {
+        flex: none;
+        overflow-x: auto;
+        overflow-y: hidden;
+    }
+
+    .git-diff-hscroll-filler {
+        height: 1px;
+    }
+}
+
+/* Unified diff view without line wrapping scrolls horizontally */
+.git-unified-diff.git-diff-no-wrap {
+    .d2h-file-diff {
+        /* Scroll inside the view, so the scrollbar stays at its bottom */
+        height: 100%;
+        overflow: auto;
+    }
+
+    .d2h-diff-table {
+        width: max-content;
+        min-width: 100%;
+        /* Collapsed borders stay in place, while the line numbers stick */
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+
+    .d2h-code-line-ctn {
+        white-space: pre;
+        width: auto;
+    }
+
+    .d2h-code-line {
+        width: auto;
+        min-width: 100%;
+        padding-left: 0.5em;
+    }
+
+    /* Keep the line numbers visible while scrolling horizontally */
+    .d2h-code-linenumber {
+        position: sticky;
+        left: 0;
+        z-index: 1;
+        display: table-cell;
+    }
+
+    /* Layer the translucent row colors on an opaque background, so the
+     * scrolled content does not shine through the sticky line numbers */
+    .d2h-code-linenumber.d2h-del {
+        background:
+            linear-gradient(var(--git-delete-bg), var(--git-delete-bg)),
+            var(--background-primary);
+    }
+
+    .d2h-code-linenumber.d2h-ins {
+        background:
+            linear-gradient(var(--git-insert-bg), var(--git-insert-bg)),
+            var(--background-primary);
+    }
+
+    .d2h-code-linenumber.d2h-del.d2h-change {
+        background:
+            linear-gradient(var(--git-change-bg), var(--git-change-bg)),
+            var(--background-primary);
+    }
+}
+
 .git-signs-gutter {
     .cm-gutterElement {
         display: grid;

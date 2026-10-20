@@ -49,6 +49,7 @@ export const DEFAULT_SETTINGS: ObsidianGitSettings = {
     dateInHistoryView: false,
     diffStyle: "split",
     diffTimeout: 50,
+    diffLineWrapping: true,
     autoStageOnEmptyIndex: true,
     hunks: {
         showSigns: false,

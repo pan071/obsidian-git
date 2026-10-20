@@ -32,6 +32,7 @@ import type {
 import type ObsidianGit from "src/main";
 import type { ObsidianGitSettings } from "src/types";
 import type HistoryView from "src/ui/history/historyView";
+import { refreshDiffLineWrapping } from "src/ui/diff/lineWrapping";
 import { convertToRgb, rgbToString } from "src/utils";
 
 const FORMAT_STRING_REFERENCE_URL =
@@ -171,6 +172,8 @@ export class ObsidianGitSettingsTab extends PluginSettingTab {
                     await (leaf.view as HistoryView).reload();
                 }
             }
+        } else if (storedKey === "diffLineWrapping") {
+            refreshDiffLineWrapping(this.app);
         } else if (storedKey === "limitToVault") {
             await this.plugin.refresh();
         } else if (storedKey === "refreshSourceControlTimer") {
@@ -603,6 +606,11 @@ export class ObsidianGitSettingsTab extends PluginSettingTab {
                                     validate: validateInteger,
                                 },
                             },
+                            this.toggle(
+                                "Wrap lines in diff view",
+                                "diffLineWrapping",
+                                "Wrap long lines in the diff views. When disabled, the diff views scroll horizontally. Can also be toggled from the diff view context menu."
+                            ),
                         ],
                     },
                     {

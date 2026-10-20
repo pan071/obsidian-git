@@ -5,6 +5,7 @@ import { DIFF_VIEW_CONFIG } from "src/constants";
 import { SimpleGit } from "src/gitManager/simpleGit";
 import type ObsidianGit from "src/main";
 import type { DiffViewState } from "src/types";
+import { lineWrappingMenuItem } from "src/ui/diff/lineWrapping";
 import {
     getSourceFile,
     mapLineBetweenTexts,
@@ -31,7 +32,8 @@ export default class DiffView extends ItemView {
         super(leaf);
         this.parser = new DOMParser();
         this.navigation = true;
-        this.contentEl.addClass("git-diff");
+        this.contentEl.addClass("git-diff", "git-unified-diff");
+        this.applyLineWrapping();
         this.gitRefreshRef = this.app.workspace.on(
             "obsidian-git:status-changed",
             () => {
@@ -45,6 +47,17 @@ export default class DiffView extends ItemView {
         });
         this.registerDomEvent(this.contentEl, "contextmenu", (event) =>
             this.showContextMenu(event)
+        );
+    }
+
+    /**
+     * Applies the line wrapping setting. Without wrapping, the diff scrolls
+     * horizontally.
+     */
+    applyLineWrapping(): void {
+        this.contentEl.toggleClass(
+            "git-diff-no-wrap",
+            !this.plugin.settings.diffLineWrapping
         );
     }
 
@@ -92,6 +105,7 @@ export default class DiffView extends ItemView {
                     )
                 )
         );
+        menu.addItem((item) => lineWrappingMenuItem(this.plugin, item));
         menu.showAtMouseEvent(event);
     }
 

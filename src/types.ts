@@ -100,6 +100,11 @@ export interface ObsidianGitSettings {
      */
     diffTimeout: number;
     /**
+     * Whether long lines wrap in the diff views. Otherwise the diff views
+     * scroll horizontally.
+     */
+    diffLineWrapping: boolean;
+    /**
      * Whether smart commit actions stage all changes when the index is empty.
      */
     autoStageOnEmptyIndex: boolean;

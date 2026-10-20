@@ -14,7 +14,7 @@ import {
 import { history, indentWithTab, standardKeymap } from "@codemirror/commands";
 import { Chunk, getChunks, MergeView } from "@codemirror/merge";
 import { highlightSelectionMatches, search } from "@codemirror/search";
-import { EditorState, Transaction } from "@codemirror/state";
+import { Compartment, EditorState, Transaction } from "@codemirror/state";
 import {
     drawSelection,
     EditorView,
@@ -26,6 +26,8 @@ import { GitError } from "simple-git";
 import { Hunks } from "src/editor/signs/hunks";
 import { rawHunkFromChunk, rawHunksToHunks } from "src/editor/signs/diff";
 import { diffContextMenu } from "src/ui/diff/contextMenu";
+import { SplitDiffHorizontalScroll } from "src/ui/diff/splitDiffHorizontalScroll";
+import { lineWrappingMenuItem } from "src/ui/diff/lineWrapping";
 
 const readOnlyEditorTheme = EditorView.theme({
     "& .cm-content": { caretColor: "transparent !important" },
@@ -62,6 +64,16 @@ export default class SplitDiffView extends ItemView {
      * cursor line, when the command palette took the focus.
      */
     private lastFocusedSide: "a" | "b" = "b";
+
+    /**
+     * Switches the line wrapping of both editors without recreating them.
+     */
+    private readonly lineWrappingCompartment = new Compartment();
+
+    /**
+     * The synchronized horizontal scrollbars, used without line wrapping.
+     */
+    private horizontalScroll: SplitDiffHorizontalScroll | undefined;
 
     /**
      * Prevent to load text from file if the modification event was caused by this instance
@@ -208,6 +220,8 @@ export default class SplitDiffView extends ItemView {
     }
 
     onClose(): Promise<void> {
+        this.horizontalScroll?.destroy();
+        this.horizontalScroll = undefined;
         window.clearInterval(this.intervalRef);
         return super.onClose();
     }
@@ -520,7 +534,38 @@ export default class SplitDiffView extends ItemView {
                         )
                     )
             );
+            menu.addItem((item) => lineWrappingMenuItem(this.plugin, item));
         };
+    }
+
+    /**
+     * Returns the line wrapping extension matching the setting.
+     */
+    private lineWrappingExtension() {
+        return this.plugin.settings.diffLineWrapping
+            ? EditorView.lineWrapping
+            : [];
+    }
+
+    /**
+     * Applies the line wrapping setting to both editors. Without wrapping,
+     * the editors scroll horizontally with synchronized scrollbars.
+     */
+    applyLineWrapping(): void {
+        this.contentEl.toggleClass(
+            "git-diff-no-wrap",
+            !this.plugin.settings.diffLineWrapping
+        );
+        if (!this.mergeView) return;
+        // Reconfigure both editors, so unsaved edits and the cursor are kept
+        for (const editor of [this.mergeView.a, this.mergeView.b]) {
+            editor.dispatch({
+                effects: this.lineWrappingCompartment.reconfigure(
+                    this.lineWrappingExtension()
+                ),
+            });
+        }
+        this.horizontalScroll?.scheduleUpdate();
     }
 
     /**
@@ -538,6 +583,12 @@ export default class SplitDiffView extends ItemView {
                     this.lastFocusedSide = side;
                 },
             }),
+            // Content changes may change the horizontal scroll width
+            EditorView.updateListener.of((update) => {
+                if (update.geometryChanged) {
+                    this.horizontalScroll?.scheduleUpdate();
+                }
+            }),
         ];
     }
 
@@ -551,6 +602,8 @@ export default class SplitDiffView extends ItemView {
             this.refreshing = true;
             try {
                 // cleanup
+                this.horizontalScroll?.destroy();
+                this.horizontalScroll = undefined;
                 this.mergeView?.destroy();
                 const container = this.containerEl.children[1]!;
                 container.empty();
@@ -558,6 +611,10 @@ export default class SplitDiffView extends ItemView {
                 // new
 
                 this.contentEl.addClass("git-split-diff-view", "git-diff");
+                this.contentEl.toggleClass(
+                    "git-diff-no-wrap",
+                    !this.plugin.settings.diffLineWrapping
+                );
                 this.bIsEditable = await this.bShouldBeEditable();
                 this.indexUnmerged = false;
 
@@ -591,7 +648,9 @@ export default class SplitDiffView extends ItemView {
                     keymap.of([...standardKeymap, indentWithTab]),
                     history(),
                     search(),
-                    EditorView.lineWrapping,
+                    this.lineWrappingCompartment.of(
+                        this.lineWrappingExtension()
+                    ),
                 ];
 
                 const autoSavePlugin = ViewPlugin.define((view) => ({
@@ -669,6 +728,11 @@ export default class SplitDiffView extends ItemView {
                     },
                     parent: container,
                 });
+                // The scrollbars stick to the bottom of the vertically scrolling container
+                this.horizontalScroll = new SplitDiffHorizontalScroll(
+                    this.mergeView,
+                    container as HTMLElement
+                );
             } finally {
                 this.refreshing = false;
             }
