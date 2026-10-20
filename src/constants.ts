@@ -53,6 +53,7 @@ export const DEFAULT_SETTINGS: ObsidianGitSettings = {
     hunks: {
         showSigns: false,
         highlightLines: false,
+        closePreviewOnOutsideClick: false,
         hunkCommands: false,
         statusBar: "disabled",
     },

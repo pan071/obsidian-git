@@ -111,6 +111,11 @@ export interface ObsidianGitSettings {
          * signs. Only takes effect, when `showSigns` is enabled.
          */
         highlightLines: boolean;
+        /**
+         * Whether a hunk preview gets closed by clicking anywhere outside of
+         * it. The signs gutter keeps toggling the previews.
+         */
+        closePreviewOnOutsideClick: boolean;
         statusBar: "disabled" | "colored" | "monochrome";
     };
 }

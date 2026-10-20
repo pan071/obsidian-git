@@ -115,6 +115,44 @@ function getTooltips(state: EditorState): Tooltip[] {
     }
 }
 
+/**
+ * Closes a hunk preview, when clicking anywhere in the window outside of it,
+ * if enabled in the settings. Clicks on the signs gutter and on other hunk
+ * previews are ignored, so the gutter keeps toggling the previews and
+ * multiple previews can stay open.
+ *
+ * @param editor The editor showing the preview.
+ * @param previewEl The root element of the preview.
+ * @param close Closes the preview.
+ * @returns A function removing the listener or `undefined`, if disabled.
+ */
+function registerOutsideClickHandler(
+    editor: EditorView,
+    previewEl: HTMLElement,
+    close: () => void
+): (() => void) | undefined {
+    if (!pluginRef.plugin?.settings.hunks.closePreviewOnOutsideClick) {
+        return undefined;
+    }
+    // Listen on the whole window the editor lives in, also for popout windows
+    const doc = editor.dom.ownerDocument;
+    const handler = (event: MouseEvent) => {
+        const target = event.target;
+        if (!(target instanceof Node) || previewEl.contains(target)) return;
+        // The gutter toggles the previews itself and other previews stay usable
+        if (
+            target instanceof Element &&
+            target.closest(".git-signs-gutter, .git-diff-tooltip")
+        ) {
+            return;
+        }
+        close();
+    };
+    // Use the capture phase to also get clicks, which stop the propagation
+    doc.addEventListener("mousedown", handler, true);
+    return () => doc.removeEventListener("mousedown", handler, true);
+}
+
 function createTooltip(
     hunk: Hunk,
     state: EditorState,
@@ -188,12 +226,19 @@ function createTooltip(
         togglePreviewHunk(editor, pos);
     });
 
+    const outsideClickHandler = registerOutsideClickHandler(
+        editor,
+        contentEl,
+        () => togglePreviewHunk(editor, pos)
+    );
+
     return {
         dom: contentEl,
         destroy: () => {
             if (eventHandler) {
                 scope?.unregister(eventHandler);
             }
+            outsideClickHandler?.();
         },
         update: (update) => {
             pos = update.changes.mapPos(pos);

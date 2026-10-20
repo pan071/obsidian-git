@@ -523,6 +523,11 @@ export class ObsidianGitSettingsTab extends PluginSettingTab {
                                 "Additionally color the background of added and changed lines. Requires signs to be enabled."
                             ),
                             this.toggle(
+                                "Close hunk preview on outside click",
+                                "hunks.closePreviewOnOutsideClick",
+                                "Close an opened hunk preview by clicking anywhere outside of it, instead of only by clicking its sign again."
+                            ),
+                            this.toggle(
                                 "Hunk commands",
                                 "hunks.hunkCommands",
                                 "Commands to stage and reset hunks and navigate between them."
