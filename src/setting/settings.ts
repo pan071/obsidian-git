@@ -518,6 +518,11 @@ export class ObsidianGitSettingsTab extends PluginSettingTab {
                                 "Show colored change markers in the editor and stage, reset, or preview hunks."
                             ),
                             this.toggle(
+                                "Highlight changed lines",
+                                "hunks.highlightLines",
+                                "Additionally color the background of added and changed lines. Requires signs to be enabled."
+                            ),
+                            this.toggle(
                                 "Hunk commands",
                                 "hunks.hunkCommands",
                                 "Commands to stage and reset hunks and navigate between them."

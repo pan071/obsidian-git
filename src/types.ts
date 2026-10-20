@@ -106,6 +106,11 @@ export interface ObsidianGitSettings {
     hunks: {
         hunkCommands: boolean;
         showSigns: boolean;
+        /**
+         * Whether changed lines get a background color in addition to the
+         * signs. Only takes effect, when `showSigns` is enabled.
+         */
+        highlightLines: boolean;
         statusBar: "disabled" | "colored" | "monochrome";
     };
 }

@@ -52,6 +52,7 @@ export const DEFAULT_SETTINGS: ObsidianGitSettings = {
     autoStageOnEmptyIndex: true,
     hunks: {
         showSigns: false,
+        highlightLines: false,
         hunkCommands: false,
         statusBar: "disabled",
     },

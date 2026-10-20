@@ -1,5 +1,10 @@
-import { RangeSet, StateField, Transaction } from "@codemirror/state";
-import { EditorView, gutter, GutterMarker } from "@codemirror/view";
+import {
+    RangeSet,
+    StateField,
+    Transaction,
+    type Range,
+} from "@codemirror/state";
+import { Decoration, EditorView, gutter, GutterMarker } from "@codemirror/view";
 import { Hunks, type Hunk, type SignType } from "./hunks";
 import {
     DebouncedComputeHunksEffectType,
@@ -95,6 +100,49 @@ function getMarkers(
     }
     return markers;
 }
+
+/**
+ * The sign types, whose lines still exist in the editor and get highlighted.
+ * Deleted lines are only indicated by their sign.
+ */
+const HIGHLIGHTED_SIGN_TYPES = new Set<SignType>([
+    "add",
+    "change",
+    "changedelete",
+    "untracked",
+]);
+
+/**
+ * Colors the background of added and changed lines based on the signs.
+ */
+export const signsLineHighlight = EditorView.decorations.compute(
+    [signsMarker],
+    (state) => {
+        const markers = state.field(signsMarker, false);
+        if (!markers) {
+            return Decoration.none;
+        }
+        const decorations: Range<Decoration>[] = [];
+        // Create a line decoration for every sign of a still existing line
+        for (let iter = markers.iter(); iter.value; iter.next()) {
+            const marker: unknown = iter.value;
+            if (
+                !(marker instanceof GitGutterMarker) ||
+                !HIGHLIGHTED_SIGN_TYPES.has(marker.type)
+            ) {
+                continue;
+            }
+            decorations.push(
+                Decoration.line({
+                    class: `git-line-highlight git-line-${marker.type} ${
+                        marker.staged ? "staged" : "unstaged"
+                    }`,
+                }).range(state.doc.lineAt(iter.from).from)
+            );
+        }
+        return Decoration.set(decorations, true);
+    }
+);
 
 export const signsGutter = gutter({
     class: "git-signs-gutter",

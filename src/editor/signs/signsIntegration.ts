@@ -8,6 +8,7 @@ import {
     enabledSignsExtensions,
     SignsProvider,
 } from "./signsProvider";
+import { signsLineHighlight } from "./gutter";
 import { eventsPerFilePathSingleton } from "../eventsPerFilepath";
 import { ChangesStatusBar } from "./changesStatusBar";
 
@@ -110,6 +111,9 @@ export class SignsFeature {
         this.codeMirrorExtensions.push(enabledHunksExtensions);
         if (this.plg.settings.hunks.showSigns) {
             this.codeMirrorExtensions.push(...enabledSignsExtensions);
+            if (this.plg.settings.hunks.highlightLines) {
+                this.codeMirrorExtensions.push(signsLineHighlight);
+            }
         }
         this.plg.app.workspace.updateOptions();
 

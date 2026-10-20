@@ -763,6 +763,34 @@ div:hover > .git-gutter-marker.git-changedelete {
     opacity: 0.5;
 }
 
+/* Background of added and changed lines, when line highlighting is enabled */
+.cm-line.git-line-highlight {
+    --git-line-highlight-strength: 12%;
+}
+
+/* Staged lines are dimmed like their signs */
+.cm-line.git-line-highlight.staged {
+    --git-line-highlight-strength: 6%;
+}
+
+.cm-line.git-line-highlight.git-line-add,
+.cm-line.git-line-highlight.git-line-untracked {
+    background-color: color-mix(
+        in srgb,
+        var(--color-green) var(--git-line-highlight-strength),
+        transparent
+    );
+}
+
+.cm-line.git-line-highlight.git-line-change,
+.cm-line.git-line-highlight.git-line-changedelete {
+    background-color: color-mix(
+        in srgb,
+        var(--color-yellow) var(--git-line-highlight-strength),
+        transparent
+    );
+}
+
 /* Prevent shifting of the editor when git signs gutter is the only gutter present */
 .cm-gutters.cm-gutters-before:has(> .git-signs-gutter:only-child) {
     margin-inline-end: 0;
