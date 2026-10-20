@@ -1,10 +1,15 @@
 import { html } from "diff2html";
 import type { EventRef, ViewStateResult, WorkspaceLeaf } from "obsidian";
-import { ItemView, Platform } from "obsidian";
+import { ItemView, Menu, Platform } from "obsidian";
 import { DIFF_VIEW_CONFIG } from "src/constants";
 import { SimpleGit } from "src/gitManager/simpleGit";
 import type ObsidianGit from "src/main";
 import type { DiffViewState } from "src/types";
+import {
+    getSourceFile,
+    mapLineBetweenTexts,
+    openFileAtLine,
+} from "src/ui/diff/sourceLine";
 
 export default class DiffView extends ItemView {
     parser: DOMParser;
@@ -12,6 +17,12 @@ export default class DiffView extends ItemView {
     state!: DiffViewState;
     gitRefreshRef!: EventRef;
     gitViewRefreshRef!: EventRef;
+
+    /**
+     * The diff row clicked last. Used to resolve the current line, as the
+     * rendered diff has no cursor.
+     */
+    private lastClickedRow: HTMLTableRowElement | undefined;
 
     constructor(
         leaf: WorkspaceLeaf,
@@ -27,6 +38,141 @@ export default class DiffView extends ItemView {
                 this.refresh().catch(console.error);
             }
         );
+        // Remember the clicked row as the current line
+        this.registerDomEvent(this.contentEl, "mousedown", (event) => {
+            const row = this.rowOfEvent(event);
+            if (row) this.lastClickedRow = row;
+        });
+        this.registerDomEvent(this.contentEl, "contextmenu", (event) =>
+            this.showContextMenu(event)
+        );
+    }
+
+    /**
+     * Returns the diff table row the event target belongs to.
+     *
+     * @param event The mouse event inside the diff.
+     * @returns The row or `undefined` if the target is not inside a row.
+     */
+    private rowOfEvent(event: MouseEvent): HTMLTableRowElement | undefined {
+        if (!(event.target instanceof Element)) return undefined;
+        return event.target.closest("tr") ?? undefined;
+    }
+
+    /**
+     * Shows the context menu with the copy and open source file items.
+     *
+     * @param event The context menu event.
+     */
+    private showContextMenu(event: MouseEvent): void {
+        const row = this.rowOfEvent(event);
+        // Keep the default behavior outside of the diff rows
+        if (!row) return;
+        event.preventDefault();
+        this.lastClickedRow = row;
+
+        const selectedText = activeWindow.getSelection()?.toString() ?? "";
+        const menu = new Menu();
+        menu.addItem((item) =>
+            item
+                .setTitle("Copy")
+                .setIcon("copy")
+                .setDisabled(selectedText.length === 0)
+                .onClick(() => navigator.clipboard.writeText(selectedText))
+        );
+        menu.addSeparator();
+        menu.addItem((item) =>
+            item
+                .setTitle("Open in editor at this line")
+                .setIcon("file-input")
+                .setDisabled(!this.canOpenSourceFile())
+                .onClick(() =>
+                    this.openSourceFileAtRow(row).catch((e) =>
+                        this.plugin.displayError(e)
+                    )
+                )
+        );
+        menu.showAtMouseEvent(event);
+    }
+
+    /**
+     * Whether the file of this diff can be opened in a normal editor.
+     */
+    canOpenSourceFile(): boolean {
+        return getSourceFile(this.plugin, this.state?.bFile) !== undefined;
+    }
+
+    /**
+     * Opens the working tree file at the line of the row clicked last or the
+     * first changed line, if no row got clicked yet.
+     */
+    async openSourceFileAtCursor(): Promise<void> {
+        const row =
+            this.lastClickedRow?.isConnected === true
+                ? this.lastClickedRow
+                : this.contentEl.querySelector<HTMLTableRowElement>(
+                      "tr:has(.d2h-ins, .d2h-del)"
+                  );
+        if (row) await this.openSourceFileAtRow(row);
+    }
+
+    /**
+     * Reads the new side line number of a diff row.
+     *
+     * @param row The diff table row.
+     * @returns The 1-based line number or `undefined` for removed and info rows.
+     */
+    private newSideLineOfRow(row: Element): number | undefined {
+        const text = row.querySelector(".line-num2")?.textContent?.trim();
+        const line = text ? Number.parseInt(text) : NaN;
+        return Number.isNaN(line) ? undefined : line;
+    }
+
+    /**
+     * Resolves the new side line of a row. Removed lines have no new side
+     * line, so the line following the removal is used.
+     *
+     * @param row The diff table row.
+     * @returns The 1-based line number on the new side of the diff.
+     */
+    private resolveNewSideLine(row: HTMLTableRowElement): number {
+        const rows = Array.from(this.contentEl.querySelectorAll("tr"));
+        const index = rows.indexOf(row);
+        // The first following row with a new side line follows the removal
+        for (let i = index; i < rows.length; i++) {
+            const line = this.newSideLineOfRow(rows[i]!);
+            if (line !== undefined) return line;
+        }
+        // The removal is at the end of the file, so use the line after the last one
+        for (let i = index - 1; i >= 0; i--) {
+            const line = this.newSideLineOfRow(rows[i]!);
+            if (line !== undefined) return line + 1;
+        }
+        return 1;
+    }
+
+    /**
+     * Opens the working tree file at the line matching the given row.
+     *
+     * @param row The diff table row.
+     */
+    async openSourceFileAtRow(row: HTMLTableRowElement): Promise<void> {
+        const file = getSourceFile(this.plugin, this.state?.bFile);
+        if (!file) return;
+        let line = this.resolveNewSideLine(row);
+
+        // The new side is not the working tree, so map it to the current file
+        if (this.state.bRef != undefined) {
+            const newSideText = await this.plugin.gitManager.show(
+                this.state.bRef,
+                this.state.bFile,
+                false
+            );
+            const workingTreeText = await this.app.vault.read(file);
+            line = mapLineBetweenTexts(newSideText, workingTreeText, line);
+        }
+
+        await openFileAtLine(this.plugin, file, line);
     }
 
     getViewType(): string {

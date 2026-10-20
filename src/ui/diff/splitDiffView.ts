@@ -1,12 +1,18 @@
-import type { Debouncer, ViewStateResult, WorkspaceLeaf } from "obsidian";
+import type { Debouncer, Menu, ViewStateResult, WorkspaceLeaf } from "obsidian";
 import { debounce, ItemView, Platform, setIcon } from "obsidian";
 import { DEFAULT_SETTINGS, SPLIT_DIFF_VIEW_CONFIG } from "src/constants";
 import { SimpleGit } from "src/gitManager/simpleGit";
 import type ObsidianGit from "src/main";
 import type { DiffViewState } from "src/types";
+import {
+    getSourceFile,
+    mapLineBetweenTexts,
+    mapLineThroughChunks,
+    openFileAtLine,
+} from "src/ui/diff/sourceLine";
 
 import { history, indentWithTab, standardKeymap } from "@codemirror/commands";
-import { getChunks, MergeView } from "@codemirror/merge";
+import { Chunk, getChunks, MergeView } from "@codemirror/merge";
 import { highlightSelectionMatches, search } from "@codemirror/search";
 import { EditorState, Transaction } from "@codemirror/state";
 import {
@@ -50,6 +56,12 @@ export default class SplitDiffView extends ItemView {
     fileSaveDebouncer!: Debouncer<[string], void>;
     bIsEditable!: boolean;
     private indexUnmerged = false;
+
+    /**
+     * The diff side, whose editor got focused last. Used to resolve the
+     * cursor line, when the command palette took the focus.
+     */
+    private lastFocusedSide: "a" | "b" = "b";
 
     /**
      * Prevent to load text from file if the modification event was caused by this instance
@@ -431,6 +443,104 @@ export default class SplitDiffView extends ItemView {
         return contentEl;
     }
 
+    /**
+     * Whether the file of this diff can be opened in a normal editor.
+     */
+    canOpenSourceFile(): boolean {
+        return (
+            this.mergeView !== undefined &&
+            getSourceFile(this.plugin, this.state?.bFile) !== undefined
+        );
+    }
+
+    /**
+     * Opens the working tree file at the line of the cursor in the last
+     * focused diff editor.
+     */
+    async openSourceFileAtCursor(): Promise<void> {
+        if (!this.mergeView) return;
+        // Use the cursor of the editor, which got focused last
+        const editor =
+            this.lastFocusedSide == "a" ? this.mergeView.a : this.mergeView.b;
+        await this.openSourceFileAtPos(
+            this.lastFocusedSide,
+            editor.state.selection.main.head
+        );
+    }
+
+    /**
+     * Opens the working tree file at the line matching the given position.
+     *
+     * @param side The diff side the position belongs to.
+     * @param pos The document position in the editor of that side.
+     */
+    async openSourceFileAtPos(side: "a" | "b", pos: number): Promise<void> {
+        const file = getSourceFile(this.plugin, this.state.bFile);
+        if (!this.mergeView || !file) return;
+
+        const aDoc = this.mergeView.a.state.doc;
+        const bDoc = this.mergeView.b.state.doc;
+        const doc = side == "a" ? aDoc : bDoc;
+        let line = doc.lineAt(Math.min(pos, doc.length)).number;
+
+        // Map lines of the old side to the b side with the shown chunks
+        if (side == "a") {
+            const chunks =
+                getChunks(this.mergeView.b.state)?.chunks ??
+                Chunk.build(aDoc, bDoc);
+            line = mapLineThroughChunks(chunks, aDoc, bDoc, line, "a");
+        }
+
+        // The b side is not the working tree, so map it to the current file
+        if (this.state.bRef != undefined) {
+            const workingTreeText = await this.app.vault.read(file);
+            line = mapLineBetweenTexts(bDoc.toString(), workingTreeText, line);
+        }
+
+        await openFileAtLine(this.plugin, file, line);
+    }
+
+    /**
+     * Adds the item to open the source file at the clicked line to the diff
+     * context menu.
+     *
+     * @param side The diff side of the editor showing the menu.
+     * @returns The context menu items callback for that side.
+     */
+    private sourceFileMenuItems(side: "a" | "b") {
+        return (menu: Menu, _: EditorView, pos: number) => {
+            menu.addItem((item) =>
+                item
+                    .setTitle("Open in editor at this line")
+                    .setIcon("file-input")
+                    .setDisabled(!this.canOpenSourceFile())
+                    .onClick(() =>
+                        this.openSourceFileAtPos(side, pos).catch((e) =>
+                            this.plugin.displayError(e)
+                        )
+                    )
+            );
+        };
+    }
+
+    /**
+     * Creates the extensions, which differ between the two diff editors.
+     *
+     * @param side The diff side of the editor.
+     * @returns The context menu and focus tracking extensions of that side.
+     */
+    private sideExtensions(side: "a" | "b") {
+        return [
+            diffContextMenu(this.sourceFileMenuItems(side)),
+            // Remember the side to resolve the cursor for the command
+            EditorView.domEventHandlers({
+                focus: () => {
+                    this.lastFocusedSide = side;
+                },
+            }),
+        ];
+    }
+
     async createMergeView() {
         if (
             this.state?.aFile &&
@@ -482,7 +592,6 @@ export default class SplitDiffView extends ItemView {
                     history(),
                     search(),
                     EditorView.lineWrapping,
-                    diffContextMenu,
                 ];
 
                 const autoSavePlugin = ViewPlugin.define((view) => ({
@@ -503,12 +612,16 @@ export default class SplitDiffView extends ItemView {
                     doc: aText,
                     extensions: [
                         ...basicExtensions,
+                        ...this.sideExtensions("a"),
                         EditorState.readOnly.of(true),
                         readOnlyEditorTheme,
                     ],
                 };
 
-                const bExtensions = [...basicExtensions];
+                const bExtensions = [
+                    ...basicExtensions,
+                    ...this.sideExtensions("b"),
+                ];
 
                 // Only make the editor modifiable when viewing the working tree version
                 if (!this.bIsEditable) {

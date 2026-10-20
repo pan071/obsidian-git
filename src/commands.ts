@@ -5,6 +5,8 @@ import ObsidianGit from "./main";
 import { openHistoryInGitHub, openLineInGitHub } from "./openInGitHub";
 import { IgnoreModal } from "./ui/modals/ignoreModal";
 import { togglePreviewHunk } from "./editor/signs/tooltip";
+import DiffView from "./ui/diff/diffView";
+import SplitDiffView from "./ui/diff/splitDiffView";
 
 export function addCommmands(plugin: ObsidianGit) {
     const app = plugin.app;
@@ -440,6 +442,22 @@ export function addCommmands(plugin: ObsidianGit) {
             plugin.settingsTab?.configureLineAuthorShowStatus(
                 !plugin.settings.lineAuthor.show
             ),
+    });
+
+    plugin.addCommand({
+        id: "open-source-file-at-current-line",
+        name: "Open source file at current line",
+        checkCallback: (checking) => {
+            // Only the diff views have a line to map to the source file
+            const view =
+                app.workspace.getActiveViewOfType(SplitDiffView) ??
+                app.workspace.getActiveViewOfType(DiffView);
+            if (checking) {
+                return view?.canOpenSourceFile() ?? false;
+            }
+            view?.openSourceFileAtCursor().catch((e) => plugin.displayError(e));
+            return true;
+        },
     });
 
     plugin.addCommand({
