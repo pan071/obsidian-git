@@ -140,6 +140,13 @@ export default class SplitDiffView extends ItemView {
             })
         );
 
+        // Dragging the tab out or moving it to a new window keeps the editor DOM
+        this.register(
+            this.containerEl.onWindowMigrated((win) =>
+                this.migrateToWindow(win)
+            )
+        );
+
         this.fileSaveDebouncer = debounce(
             (data: string) => {
                 const file = this.state.bFile;
@@ -174,6 +181,27 @@ export default class SplitDiffView extends ItemView {
         return (
             vaultPath ===
             this.plugin.gitManager.getRelativeVaultPath(this.state.bFile)
+        );
+    }
+
+    /**
+     * Moves the existing editors to the document of another window. The
+     * editors mount their styles and DOM observers only in the document they
+     * got created in, so their content would not be rendered in the new
+     * window otherwise.
+     *
+     * @param win The window, the view got moved to.
+     */
+    private migrateToWindow(win: Window): void {
+        if (!this.mergeView) return;
+        // Mount the styles and observers of both editors in the new window
+        this.mergeView.a.setRoot(win.document);
+        this.mergeView.b.setRoot(win.document);
+        // Recreate the scrollbars, so their observers belong to the new window
+        this.horizontalScroll?.destroy();
+        this.horizontalScroll = new SplitDiffHorizontalScroll(
+            this.mergeView,
+            this.containerEl.children[1] as HTMLElement
         );
     }
 

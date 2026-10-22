@@ -35,6 +35,9 @@ export class SplitDiffHorizontalScroll {
     /** The pending animation frame of a scheduled update. */
     private updateFrame: number | undefined;
 
+    /** The window containing the view, which may be a popout window. */
+    private readonly win: Window & typeof globalThis;
+
     /**
      * Creates the scrollbars below the merge view.
      *
@@ -61,8 +64,12 @@ export class SplitDiffHorizontalScroll {
             });
         }
 
+        // Observe and schedule frames in the window, which contains the view
+        this.win = container.win as Window & typeof globalThis;
         // Editor widths change with the view width
-        this.resizeObserver = new ResizeObserver(() => this.scheduleUpdate());
+        this.resizeObserver = new this.win.ResizeObserver(() =>
+            this.scheduleUpdate()
+        );
         this.resizeObserver.observe(this.mergeView.dom);
         this.scheduleUpdate();
     }
@@ -106,7 +113,7 @@ export class SplitDiffHorizontalScroll {
      */
     scheduleUpdate(): void {
         if (this.updateFrame !== undefined) return;
-        this.updateFrame = window.requestAnimationFrame(() => {
+        this.updateFrame = this.win.requestAnimationFrame(() => {
             this.updateFrame = undefined;
             this.update();
         });
@@ -153,7 +160,7 @@ export class SplitDiffHorizontalScroll {
      */
     destroy(): void {
         if (this.updateFrame !== undefined) {
-            window.cancelAnimationFrame(this.updateFrame);
+            this.win.cancelAnimationFrame(this.updateFrame);
             this.updateFrame = undefined;
         }
         this.resizeObserver.disconnect();
